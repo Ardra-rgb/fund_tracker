@@ -1,30 +1,49 @@
 
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
 
 
 class Member(models.Model):
-    member_id = models.CharField(max_length=20, unique=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="fund_members",
+    )
+    member_id = models.CharField(max_length=20)
     name = models.CharField(max_length=150)
     phone = models.CharField(max_length=15)
     monthly_amount = models.DecimalField(max_digits=10, decimal_places=2)
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner", "member_id"],
+                name="unique_owner_member_id",
+            )
+        ]
+
     def __str__(self):
         return f"{self.member_id} - {self.name}"
 
 
 class CollectionPeriod(models.Model):
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="collection_periods",
+    )
     start_month = models.DateField()
     end_month = models.DateField()
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["start_month", "end_month"],
-                name="unique_collection_period",
+                fields=["owner", "start_month", "end_month"],
+                name="unique_owner_period_range",
             )
         ]
         ordering = ["start_month", "end_month"]

@@ -41,6 +41,19 @@ class MemberForm(forms.ModelForm):
             "phone": forms.TextInput(attrs={"placeholder": "Phone number"}),
         }
 
+    def __init__(self, *args, owner, **kwargs):
+        self.owner = owner
+        super().__init__(*args, **kwargs)
+
+    def clean_member_id(self):
+        member_id = self.cleaned_data["member_id"]
+        existing_members = Member.objects.filter(owner=self.owner, member_id=member_id)
+        if self.instance.pk:
+            existing_members = existing_members.exclude(pk=self.instance.pk)
+        if existing_members.exists():
+            raise forms.ValidationError("You already use this member ID.")
+        return member_id
+
 
 class PaymentForm(forms.ModelForm):
     class Meta:
@@ -85,3 +98,7 @@ class InstallmentForm(forms.ModelForm):
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "amount": forms.NumberInput(attrs={"min": "0.01", "step": "0.01"}),
         }
+
+    def __init__(self, *args, owner, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["member"].queryset = Member.objects.filter(owner=owner)
