@@ -164,6 +164,12 @@ def _render_dashboard(
     payments = Payment.objects.select_related(
         "installment__member", "recorded_by"
     ).order_by("-payment_date", "-created_at")
+    payment_months = []
+    for payment in payments:
+        month = payment.payment_date.replace(day=1)
+        if not payment_months or payment_months[-1]["month"] != month:
+            payment_months.append({"month": month, "payments": []})
+        payment_months[-1]["payments"].append(payment)
     return render(
         request,
         "funds/dashboard.html",
@@ -171,6 +177,7 @@ def _render_dashboard(
             "members": members,
             "installments": installments,
             "payments": payments,
+            "payment_months": payment_months,
             "active_members": Member.objects.filter(active=True).count(),
             "paid_count": paid_count,
             "pending_count": len(current_installments) - paid_count,

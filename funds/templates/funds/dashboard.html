@@ -53,10 +53,16 @@
         </section>
         <section class="content-section history-section" id="payments">
             <div class="section-heading"><div><p class="eyebrow">THE LEDGER</p><h2>Payment history</h2></div><span class="section-count">{{ payments|length }} recorded</span></div>
-            <div class="table-wrap"><table><thead><tr><th>Member</th><th>Installment</th><th>Paid on</th><th>Amount</th><th>Reference</th><th>Recorded by</th></tr></thead><tbody>
-                {% for payment in payments %}<tr><td><span class="member-name">{{ payment.installment.member.name }}</span><small class="member-id">{{ payment.installment.member.member_id }}</small></td><td>{{ payment.installment.month|date:"F Y" }}</td><td>{{ payment.payment_date|date:"M j, Y" }}</td><td>{{ payment.amount|floatformat:2 }}</td><td>{{ payment.reference|default:"-" }}</td><td>{{ payment.recorded_by.username|default:"-" }}</td></tr>
-                {% empty %}<tr><td class="empty-state" colspan="6">Payments you record will appear here.</td></tr>{% endfor %}
-            </tbody></table></div>
+            {% for payment_month in payment_months %}
+                <div class="payment-month">
+                    <div class="payment-month-heading"><h3>{{ payment_month.month|date:"F Y" }}</h3><span>{{ payment_month.payments|length }} payment{{ payment_month.payments|length|pluralize }}</span></div>
+                    <div class="table-wrap"><table><thead><tr><th>Member</th><th>Installment</th><th>Paid on</th><th>Amount</th><th>Reference</th><th>Recorded by</th></tr></thead><tbody>
+                        {% for payment in payment_month.payments %}<tr><td><span class="member-name">{{ payment.installment.member.name }}</span><small class="member-id">{{ payment.installment.member.member_id }}</small></td><td>{{ payment.installment.month|date:"F Y" }}</td><td>{{ payment.payment_date|date:"M j, Y" }}</td><td>{{ payment.amount|floatformat:2 }}</td><td>{{ payment.reference|default:"-" }}</td><td>{{ payment.recorded_by.username|default:"-" }}</td></tr>{% endfor %}
+                    </tbody></table></div>
+                </div>
+            {% empty %}
+                <div class="table-wrap"><table><tbody><tr><td class="empty-state">Payments you record will appear here.</td></tr></tbody></table></div>
+            {% endfor %}
         </section>
         <footer class="page-footer">Fund Ledger <span>·</span> {{ current_month }}</footer>
     </main>
