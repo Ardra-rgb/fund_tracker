@@ -1,0 +1,64 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard | Fund Ledger</title>
+    <link rel="stylesheet" href="{% static 'funds/app.css' %}">
+</head>
+<body class="dashboard-page">
+    <header class="topbar">
+        <a class="brand" href="{% url 'dashboard' %}"><span class="brand-mark">F</span> Fund Ledger</a>
+        <nav class="topnav" aria-label="Main navigation">
+            <a class="nav-link active" href="#overview">Overview</a>
+            <a class="nav-link" href="#members">Members</a>
+            <a class="nav-link" href="#payments">Payments</a>
+        </nav>
+        <div class="user-menu"><span class="user-avatar">{{ request.user.username|first|upper }}</span><span class="user-name">{{ request.user.username }}</span><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="logout-button" type="submit">Log out</button></form></div>
+    </header>
+    <main class="dashboard-main" id="overview">
+        <div class="page-heading">
+            <div><p class="eyebrow">FUND OVERVIEW</p><h1>Good to see you, {{ request.user.username }}.</h1><p class="muted">Here is your collection snapshot for {{ current_month }}.</p></div>
+            <form method="post" class="inline-form">{% csrf_token %}<input type="hidden" name="action" value="generate_installments"><button class="button button-dark" type="submit">＋ Create monthly installments</button></form>
+        </div>
+        {% if messages %}<div class="messages">{% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}</div>{% endif %}
+        <section class="stats-grid" aria-label="Monthly summary">
+            <article class="stat-card stat-collected"><span class="stat-label">Collected this month</span><strong>{{ collected|floatformat:2 }}</strong><span class="stat-foot">{{ paid_count }} payments recorded</span></article>
+            <article class="stat-card"><span class="stat-label">Active members</span><strong>{{ active_members }}</strong><span class="stat-foot">In your fund</span></article>
+            <article class="stat-card"><span class="stat-label">Paid installments</span><strong>{{ paid_count }}<small> / {{ installments|length }}</small></strong><span class="stat-foot">{{ current_month }}</span></article>
+            <article class="stat-card stat-pending"><span class="stat-label">Still pending</span><strong>{{ pending_count }}</strong><span class="stat-foot">Current month</span></article>
+        </section>
+        <section class="content-section" id="members">
+            <div class="section-heading"><div><p class="eyebrow">YOUR COMMUNITY</p><h2>Members</h2></div><span class="section-count">{{ members|length }} total</span></div>
+            <div class="member-layout">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Member</th><th>Phone</th><th>Monthly amount</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody>
+                            {% for member in members %}<tr><td><span class="member-initial">{{ member.name|first|upper }}</span><span class="member-name">{{ member.name }}</span><small class="member-id">{{ member.member_id }}</small></td><td>{{ member.phone }}</td><td>{{ member.monthly_amount|floatformat:2 }}</td><td><span class="status-pill {% if member.active %}status-active{% else %}status-inactive{% endif %}">{% if member.active %}Active{% else %}Inactive{% endif %}</span></td><td><details class="row-editor"><summary class="button button-small">Edit</summary><form method="post" class="row-edit-form">{% csrf_token %}<input type="hidden" name="action" value="edit_member"><input type="hidden" name="member_id" value="{{ member.id }}">{% for field in member.edit_form %}<label class="field"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}<button class="button button-small" type="submit">Save</button></form></details><form method="post" class="row-delete-form" onsubmit="return confirm('Delete {{ member.name|escapejs }} and all associated records?');">{% csrf_token %}<input type="hidden" name="action" value="delete_member"><input type="hidden" name="member_id" value="{{ member.id }}"><button class="button button-danger-small" type="submit">Delete</button></form></td></tr>
+                            {% empty %}<tr><td class="empty-state" colspan="5">No members yet. Add your first member to get started.</td></tr>{% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <aside class="add-member-panel"><p class="eyebrow">GET STARTED</p><h3>Add a member</h3><form method="post" class="form-stack compact-form">{% csrf_token %}<input type="hidden" name="action" value="add_member">{% for field in member_form %}<label class="field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}<button class="button button-primary button-wide" type="submit">Add member <span aria-hidden="true">→</span></button></form></aside>
+            </div>
+        </section>
+        <section class="content-section" id="installments">
+            <div class="section-heading"><div><p class="eyebrow">{{ current_month|upper }}</p><h2>Monthly installments</h2></div><span class="section-count">{{ installments|length }} scheduled</span></div>
+            <div class="table-wrap"><table><thead><tr><th>Member</th><th>Month</th><th>Due date</th><th>Amount</th><th>Status</th><th>Record payment</th><th>Actions</th></tr></thead><tbody>
+                {% for installment in installments %}<tr><td><span class="member-name">{{ installment.member.name }}</span><small class="member-id">{{ installment.member.member_id }}</small></td><td>{{ installment.month|date:"F Y" }}</td><td>{{ installment.due_date|date:"M j, Y" }}</td><td>{{ installment.amount|floatformat:2 }}</td><td>{% if installment.payment %}<span class="status-pill status-paid">Paid</span>{% else %}<span class="status-pill status-pending">Pending</span>{% endif %}</td><td>{% if not installment.payment %}<form method="post" class="payment-form">{% csrf_token %}<input type="hidden" name="action" value="record_payment"><input type="hidden" name="installment_id" value="{{ installment.id }}"><input type="date" name="payment_date" value="{{ payment_form.initial.payment_date|date:'Y-m-d' }}" aria-label="Payment date"><input type="text" name="reference" placeholder="Reference" aria-label="Payment reference"><button class="button button-small" type="submit">Record</button></form>{% else %}<span class="muted">{{ installment.payment.payment_date|date:"M j" }}</span>{% endif %}</td><td><details class="row-editor"><summary class="button button-small">Edit</summary><form method="post" class="row-edit-form">{% csrf_token %}<input type="hidden" name="action" value="edit_installment"><input type="hidden" name="installment_id" value="{{ installment.id }}">{% for field in installment.edit_form %}<label class="field"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}<button class="button button-small" type="submit">Save</button></form></details><form method="post" class="row-delete-form" onsubmit="return confirm('Delete this installment and its payment record?');">{% csrf_token %}<input type="hidden" name="action" value="delete_installment"><input type="hidden" name="installment_id" value="{{ installment.id }}"><button class="button button-danger-small" type="submit">Delete</button></form></td></tr>
+                {% empty %}<tr><td class="empty-state" colspan="7">No installments for {{ current_month }} yet. Create this month’s installments to begin.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </section>
+        <section class="content-section history-section" id="payments">
+            <div class="section-heading"><div><p class="eyebrow">THE LEDGER</p><h2>Payment history</h2></div><span class="section-count">{{ payments|length }} recorded</span></div>
+            <div class="table-wrap"><table><thead><tr><th>Member</th><th>Installment</th><th>Paid on</th><th>Amount</th><th>Reference</th><th>Recorded by</th></tr></thead><tbody>
+                {% for payment in payments %}<tr><td><span class="member-name">{{ payment.installment.member.name }}</span><small class="member-id">{{ payment.installment.member.member_id }}</small></td><td>{{ payment.installment.month|date:"F Y" }}</td><td>{{ payment.payment_date|date:"M j, Y" }}</td><td>{{ payment.amount|floatformat:2 }}</td><td>{{ payment.reference|default:"-" }}</td><td>{{ payment.recorded_by.username|default:"-" }}</td></tr>
+                {% empty %}<tr><td class="empty-state" colspan="6">Payments you record will appear here.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </section>
+        <footer class="page-footer">Fund Ledger <span>·</span> {{ current_month }}</footer>
+    </main>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% if mode == "register" %}Create account{% else %}Sign in{% endif %} | Fund Ledger</title>
+    <link rel="stylesheet" href="{% static 'funds/app.css' %}">
+</head>
+<body class="auth-page">
+    <main class="auth-layout">
+        <section class="auth-intro">
+            <a class="brand brand-light" href="{% url 'login' %}"><span class="brand-mark">F</span> Fund Ledger</a>
+            <div class="intro-copy">
+                <p class="eyebrow">A clearer view of every contribution</p>
+                <h1>Keep your fund moving.</h1>
+                <p>One calm place to manage members, monthly dues, and every payment received.</p>
+            </div>
+            <span class="intro-note">MEMBERS · INSTALLMENTS · HISTORY</span>
+        </section>
+        <section class="auth-panel">
+            <div class="auth-form-wrap">
+                <p class="eyebrow">FUND TRACKER</p>
+                <h2>{% if mode == "register" %}Create your account{% else %}Welcome back{% endif %}</h2>
+                <p class="muted">{% if mode == "register" %}Set up an account to manage your fund.{% else %}Sign in to continue to your dashboard.{% endif %}</p>
+                <form method="post" class="form-stack">
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+                    {% for field in form %}
+                        <label class="field" for="{{ field.id_for_label }}">
+                            <span>{{ field.label }}</span>
+                            {{ field }}
+                            {% if field.help_text %}<small class="help-text">{{ field.help_text|safe }}</small>{% endif %}
+                            {% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}
+                        </label>
+                    {% endfor %}
+                    <button class="button button-primary button-wide" type="submit">{% if mode == "register" %}Create account{% else %}Sign in{% endif %}<span aria-hidden="true">→</span></button>
+                </form>
+                <p class="auth-switch">{% if mode == "register" %}Already registered? <a href="{% url 'login' %}">Sign in</a>{% else %}New to Fund Ledger? <a href="{% url 'register' %}">Create an account</a>{% endif %}</p>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
