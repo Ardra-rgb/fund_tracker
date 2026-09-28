@@ -1,0 +1,33 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Set Collection Months | Fund Ledger</title>
+    <link rel="stylesheet" href="{% static 'funds/app.css' %}">
+</head>
+<body class="dashboard-page">
+    <header class="topbar">
+        <a class="brand" href="{% url 'dashboard' %}"><span class="brand-mark">F</span> Fund Ledger</a>
+        <nav class="topnav" aria-label="Main navigation"><a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a></nav>
+        <div class="user-menu"><span class="user-avatar">{{ request.user.username|first|upper }}</span><span class="user-name">{{ request.user.username }}</span><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="logout-button" type="submit">Log out</button></form></div>
+    </header>
+    <main class="dashboard-main period-page">
+        <div class="page-heading">
+            <div><p class="eyebrow">COLLECTION SETUP</p><h1>Choose collection months</h1><p class="muted">Installments will be created for every active member in each selected month.</p></div>
+        </div>
+        <form method="post" class="period-form-panel">
+            {% csrf_token %}
+            {% if form.non_field_errors %}<p class="form-errors">{{ form.non_field_errors|striptags }}</p>{% endif %}
+            <div class="period-fields">
+                {% for field in form %}
+                    <label class="field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>
+                {% endfor %}
+            </div>
+            <p class="help-text">All months from the start through the end month are included.</p>
+            <div class="period-actions"><a class="button button-quiet" href="{% url 'dashboard' %}">Cancel</a><button class="button button-primary" type="submit">Create installments</button></div>
+        </form>
+    </main>
+</body>
+</html>

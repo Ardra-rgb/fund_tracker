@@ -16,6 +16,23 @@ class Member(models.Model):
         return f"{self.member_id} - {self.name}"
 
 
+class CollectionPeriod(models.Model):
+    start_month = models.DateField()
+    end_month = models.DateField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["start_month", "end_month"],
+                name="unique_collection_period",
+            )
+        ]
+        ordering = ["start_month", "end_month"]
+
+    def __str__(self):
+        return f"{self.start_month:%B %Y} - {self.end_month:%B %Y}"
+
+
 class Installment(models.Model):
     member = models.ForeignKey(
         Member,

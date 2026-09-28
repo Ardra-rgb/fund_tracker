@@ -1,6 +1,27 @@
+from calendar import monthrange
+
 from django import forms
 
 from .models import Installment, Member, Payment
+
+
+class CollectionPeriodForm(forms.Form):
+    start_month = forms.DateField(
+        input_formats=["%Y-%m"],
+        widget=forms.DateInput(format="%Y-%m", attrs={"type": "month"}),
+    )
+    end_month = forms.DateField(
+        input_formats=["%Y-%m"],
+        widget=forms.DateInput(format="%Y-%m", attrs={"type": "month"}),
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_month = cleaned_data.get("start_month")
+        end_month = cleaned_data.get("end_month")
+        if start_month and end_month and end_month < start_month:
+            self.add_error("end_month", "End month must be the same as or later than the start month.")
+        return cleaned_data
 
 
 class MemberForm(forms.ModelForm):
@@ -29,6 +50,30 @@ class PaymentForm(forms.ModelForm):
             "payment_date": forms.DateInput(attrs={"type": "date"}),
             "reference": forms.TextInput(attrs={"placeholder": "Optional receipt or reference"}),
         }
+
+
+class MonthPaymentForm(forms.Form):
+    payment_day = forms.IntegerField(
+        label="Day paid",
+        min_value=1,
+        widget=forms.NumberInput(attrs={"min": "1", "max": "31", "placeholder": "Day"}),
+    )
+    reference = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={"placeholder": "Optional receipt or reference"}),
+    )
+
+    def __init__(self, *args, month, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.month = month
+        self.fields["payment_day"].widget.attrs["max"] = monthrange(month.year, month.month)[1]
+
+    def clean_payment_day(self):
+        payment_day = self.cleaned_data["payment_day"]
+        if payment_day > monthrange(self.month.year, self.month.month)[1]:
+            raise forms.ValidationError("Enter a valid day for the selected month.")
+        return payment_day
 
 
 class InstallmentForm(forms.ModelForm):

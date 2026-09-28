@@ -22,6 +22,7 @@ from funds import views as fund_views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', fund_views.dashboard, name='dashboard'),
+    path('collection-period/', fund_views.collection_period, name='collection_period'),
     path('login/', fund_views.login_view, name='login'),
     path('register/', fund_views.register_view, name='register'),
     path('logout/', fund_views.logout_view, name='logout'),
