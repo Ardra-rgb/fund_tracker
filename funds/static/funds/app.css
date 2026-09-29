@@ -72,18 +72,23 @@ button, input { font: inherit; }
 .month-link { display: flex; flex: 0 0 auto; align-items: center; border-bottom: 2px solid transparent; color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: none; }
 .month-link:hover, .month-link.active { border-color: var(--green); color: var(--green); }
 .month-nav-empty { display: flex; align-items: center; color: var(--muted); font-size: 11px; }
-.user-menu { display: flex; align-items: center; gap: 9px; margin-left: auto; }
+.user-area { display: grid; width: max-content; max-width: 100%; justify-items: end; gap: 5px; margin-right: calc(12px - clamp(20px, 5vw, 72px)); margin-left: auto; }
+.user-area-payments { width: min(100%, 390px); }
+.user-menu { display: flex; width: 100%; align-items: center; justify-content: flex-end; gap: 9px; }
+.user-menu form { margin-left: 6px; }
+.payment-search-form-compact { display: grid; width: 100%; grid-template-columns: minmax(115px, .9fr) minmax(130px, 1.2fr) auto auto; align-items: center; gap: 5px; margin: 0; padding: 0; border: 0; background: transparent; }
+.payment-search-form-compact input { min-width: 0; min-height: 30px; padding: 0 7px; font-size: 11px; }
+.payment-search-form-compact .button { min-height: 30px; padding: 0 8px; font-size: 11px; }
 .user-avatar, .member-initial { display: inline-grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: var(--green-dark); background: var(--mint); font-size: 12px; font-weight: 700; }
 .user-name { max-width: 120px; overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; }
-.user-menu form { margin-left: 6px; }
-.logout-button { padding: 7px 0 7px 10px; border: 0; border-left: 1px solid var(--line); color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; }
+.logout-button { min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); background: white; cursor: pointer; font-size: 12px; }
 .logout-button:hover { color: var(--red); }
 .dashboard-main { width: min(100% - 48px, 1220px); margin: 0 auto; padding: 42px 0 28px; }
 .period-page { max-width: 760px; }
 .period-form-panel { display: grid; gap: 17px; max-width: 580px; padding: 22px; border: 1px solid var(--line); border-radius: 5px; background: white; }
 .period-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
 .period-actions { display: flex; justify-content: flex-end; gap: 9px; }
-.month-payment-form { display: grid; grid-template-columns: minmax(220px, 1.5fr) minmax(150px, 1fr) minmax(160px, 1fr) auto; align-items: end; gap: 12px; margin: 0 0 18px; padding: 16px; border: 1px solid var(--line); border-radius: 5px; background: white; }
+.month-payment-form { display: grid; grid-template-columns: minmax(190px, 1.4fr) minmax(120px, .8fr) minmax(110px, .7fr) minmax(150px, 1fr) auto; align-items: end; gap: 12px; margin: 0 0 18px; padding: 16px; border: 1px solid var(--line); border-radius: 5px; background: white; }
 .month-payment-form select { width: 100%; min-height: 43px; padding: 0 12px; border: 1px solid #d9e0da; border-radius: 4px; color: var(--ink); background: white; font: inherit; font-size: 13px; }
 .month-payment-form .button { white-space: nowrap; }
 .month-payment-empty { margin: 0 0 18px; padding: 13px 15px; color: var(--muted); background: white; font-size: 13px; }
@@ -118,6 +123,19 @@ button, input { font: inherit; }
 .member-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 15px; align-items: start; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 5px; background: white; }
 table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
+.members-page .member-layout .table-wrap { overflow: visible; }
+.members-page .member-layout table { table-layout: fixed; white-space: normal; }
+.members-page .member-layout th:nth-child(1) { width: 25%; }
+.members-page .member-layout th:nth-child(2) { width: 18%; }
+.members-page .member-layout th:nth-child(3) { width: 17%; }
+.members-page .member-layout th:nth-child(4) { width: 18%; }
+.members-page .member-layout th:nth-child(5) { width: 22%; }
+.members-page .member-layout th, .members-page .member-layout td { padding-right: 7px; padding-left: 7px; overflow-wrap: anywhere; }
+.members-page .member-layout td:first-child { min-width: 0; }
+.members-page .member-layout td:last-child { white-space: normal; }
+.members-page .member-layout .status-pill { padding: 4px 5px; font-size: 9px; }
+.members-page .member-layout td:last-child .button { padding-right: 5px; padding-left: 5px; font-size: 11px; }
+.members-page .member-layout .row-delete-form { display: block; margin-top: 4px; }
 th { padding: 12px 15px; border-bottom: 1px solid var(--line); color: #77817b; background: #fafbf9; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
 td { height: 57px; padding: 10px 15px; border-bottom: 1px solid #edf0ed; color: #43504a; font-size: 12px; }
 tr:last-child td { border-bottom: 0; }
@@ -142,7 +160,17 @@ td .member-name + .member-id { margin-left: 0; }
 .row-editor { position: relative; display: inline-block; margin-right: 5px; vertical-align: middle; }
 .row-editor summary { list-style: none; cursor: pointer; }
 .row-editor summary::-webkit-details-marker { display: none; }
-.row-edit-form { position: absolute; z-index: 4; top: calc(100% + 6px); right: 0; display: grid; width: 245px; gap: 10px; padding: 13px; border: 1px solid var(--line); border-radius: 4px; background: white; box-shadow: 0 8px 24px rgb(32 42 40 / 12%); white-space: normal; }
+.row-edit-form { position: static; display: grid; width: min(245px, calc(100vw - 48px)); gap: 10px; margin-top: 6px; padding: 13px; border: 1px solid var(--line); border-radius: 4px; background: white; box-shadow: 0 8px 24px rgb(32 42 40 / 12%); white-space: normal; }
+.member-edit-popover { position: fixed; inset: 0; display: none; width: min(400px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; margin: auto; padding: 20px; border: 1px solid var(--line); border-radius: 5px; background: white; box-shadow: 0 16px 48px rgb(32 42 40 / 22%); }
+.member-edit-popover:popover-open { display: grid; }
+.member-edit-popover::backdrop { background: rgb(32 42 40 / 38%); }
+.member-edit-popover h3 { margin: 0; font: 700 18px 'Manrope', sans-serif; }
+.member-edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.paid-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; margin: 0 0 12px; padding: 12px 15px; border-left: 3px solid var(--green); color: var(--green-dark); background: var(--mint); font-size: 12px; }
+.paid-summary > strong { font-weight: 700; }
+.paid-summary-list { display: flex; flex-wrap: wrap; gap: 5px 14px; margin: 0; padding: 0; list-style: none; }
+.paid-summary-list li { display: inline-flex; flex-wrap: wrap; gap: 0 5px; }
+.paid-summary-list time { color: var(--muted); }
 .row-edit-form .field { gap: 4px; font-size: 11px; }
 .row-edit-form input, .row-edit-form select { width: 100%; min-height: 34px; padding: 0 8px; border: 1px solid #d9e0da; border-radius: 4px; color: var(--ink); background: white; font-size: 12px; }
 .row-delete-form { display: inline; }
@@ -169,6 +197,7 @@ td .member-name + .member-id { margin-left: 0; }
     .auth-form-wrap h2 { font-size: 25px; }
     .topbar { height: auto; min-height: 62px; flex-wrap: wrap; gap: 0 18px; padding: 11px 16px 0; }
     .brand { font-size: 15px; }
+    .user-area { order: 2; width: 100%; margin-right: 0; }
     .topnav { order: 3; width: 100%; height: 41px; gap: 22px; }
     .month-nav { height: 38px; gap: 16px; }
     .nav-link { font-size: 12px; }
@@ -186,6 +215,7 @@ td .member-name + .member-id { margin-left: 0; }
     .period-actions .button { width: 100%; }
     .month-payment-form { grid-template-columns: 1fr; padding: 14px; }
     .month-payment-form .button { width: 100%; }
+    .payment-search-form-compact { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; }
     .stats-grid { gap: 9px; margin-bottom: 33px; }
     .stat-card { min-height: 109px; padding: 13px; }
     .stat-card strong { font-size: 23px; }

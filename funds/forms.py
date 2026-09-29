@@ -66,6 +66,17 @@ class PaymentForm(forms.ModelForm):
 
 
 class MonthPaymentForm(forms.Form):
+    member = forms.ModelChoiceField(
+        label="Member who paid",
+        queryset=Member.objects.none(),
+    )
+    amount = forms.DecimalField(
+        label="Amount paid",
+        min_value=0.01,
+        max_digits=10,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={"min": "0.01", "step": "0.01"}),
+    )
     payment_day = forms.IntegerField(
         label="Day paid",
         min_value=1,
@@ -77,9 +88,10 @@ class MonthPaymentForm(forms.Form):
         widget=forms.TextInput(attrs={"placeholder": "Optional receipt or reference"}),
     )
 
-    def __init__(self, *args, month, **kwargs):
+    def __init__(self, *args, month, owner, **kwargs):
         super().__init__(*args, **kwargs)
         self.month = month
+        self.fields["member"].queryset = Member.objects.filter(owner=owner)
         self.fields["payment_day"].widget.attrs["max"] = monthrange(month.year, month.month)[1]
 
     def clean_payment_day(self):

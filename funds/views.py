@@ -1,5 +1,6 @@
 from calendar import monthrange
 from datetime import date
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -101,7 +102,7 @@ def dashboard(request):
         if action == "edit_member":
             member = get_object_or_404(
                 Member,
-                pk=request.POST.get("member_id"),
+                pk=request.POST.get("member_pk"),
                 owner=request.user,
             )
             form = MemberForm(request.POST, instance=member, owner=request.user)
@@ -127,10 +128,7 @@ def dashboard(request):
             )
             form = InstallmentForm(request.POST, instance=installment, owner=request.user)
             if form.is_valid():
-                installment = form.save()
-                if hasattr(installment, "payment"):
-                    installment.payment.amount = installment.amount
-                    installment.payment.save(update_fields=["amount"])
+                form.save()
                 messages.success(request, "Installment updated.")
                 return _dashboard_redirect(request)
             return _render_dashboard(request, installment_edit_form=form)
@@ -155,49 +153,62 @@ def dashboard(request):
         if action == "generate_installments":
             return redirect("collection_period")
         if action == "record_payment":
+            requested_month = request.GET.get("month") or request.POST.get("month")
+            if "payment_day" in request.POST:
+                if requested_month:
+                    try:
+                        selected_month = date.fromisoformat(f"{requested_month}-01")
+                    except ValueError:
+                        messages.error(request, "Select a valid collection month.")
+                        return redirect("dashboard")
+                else:
+                    selected_month = timezone.localdate().replace(day=1)
+                form = MonthPaymentForm(
+                    request.POST,
+                    month=selected_month,
+                    owner=request.user,
+                )
+                if form.is_valid():
+                    member = form.cleaned_data["member"]
+                    due_date = date(
+                        selected_month.year,
+                        selected_month.month,
+                        monthrange(selected_month.year, selected_month.month)[1],
+                    )
+                    try:
+                        with transaction.atomic():
+                            installment, _ = Installment.objects.get_or_create(
+                                member=member,
+                                month=selected_month,
+                                defaults={
+                                    "due_date": due_date,
+                                    "amount": member.monthly_amount,
+                                },
+                            )
+                            if Payment.objects.filter(installment=installment).exists():
+                                messages.error(request, "This installment is already paid.")
+                            else:
+                                Payment.objects.create(
+                                    installment=installment,
+                                    amount=form.cleaned_data["amount"],
+                                    payment_date=date(
+                                        selected_month.year,
+                                        selected_month.month,
+                                        form.cleaned_data["payment_day"],
+                                    ),
+                                    reference=form.cleaned_data["reference"],
+                                    recorded_by=request.user,
+                                )
+                                messages.success(request, "Payment recorded.")
+                    except IntegrityError:
+                        messages.error(request, "This installment is already paid.")
+                    return _dashboard_redirect(request)
+                return _render_dashboard(request, month_payment_form=form)
             installment = get_object_or_404(
                 Installment.objects.select_related("member"),
                 pk=request.POST.get("installment_id"),
                 member__owner=request.user,
             )
-            requested_month = request.GET.get("month")
-            if requested_month:
-                try:
-                    selected_month = date.fromisoformat(f"{requested_month}-01")
-                except ValueError:
-                    messages.error(request, "Select a valid collection month.")
-                    return redirect("dashboard")
-                if installment.month != selected_month:
-                    messages.error(request, "This member does not have an installment for the selected month.")
-                    return _dashboard_redirect(request)
-                if Payment.objects.filter(
-                    installment=installment,
-                    installment__member__owner=request.user,
-                ).exists():
-                    messages.error(request, "This installment is already paid.")
-                    return _dashboard_redirect(request)
-                form = MonthPaymentForm(request.POST, month=selected_month)
-                if form.is_valid():
-                    payment = Payment(
-                        installment=installment,
-                        amount=installment.amount,
-                        payment_date=date(
-                            selected_month.year,
-                            selected_month.month,
-                            form.cleaned_data["payment_day"],
-                        ),
-                        reference=form.cleaned_data["reference"],
-                        recorded_by=request.user,
-                    )
-                    try:
-                        with transaction.atomic():
-                            payment.save()
-                    except IntegrityError:
-                        messages.error(request, "This installment is already paid.")
-                    else:
-                        messages.success(request, "Payment recorded.")
-                    return _dashboard_redirect(request)
-                return _render_dashboard(request, month_payment_form=form)
             form = PaymentForm(request.POST)
             if Payment.objects.filter(
                 installment=installment,
@@ -278,6 +289,19 @@ def _render_dashboard(
         .select_related("installment__member", "recorded_by")
         .order_by("-payment_date", "-created_at")
     )
+    payment_date_filter = request.GET.get("payment_date", "").strip()
+    member_name_filter = request.GET.get("member_name", "").strip()
+    if payment_date_filter:
+        try:
+            payment_date = date.fromisoformat(payment_date_filter)
+        except ValueError:
+            payments = payments.none()
+        else:
+            payments = payments.filter(payment_date=payment_date)
+    if member_name_filter:
+        payments = payments.filter(
+            installment__member__name__icontains=member_name_filter
+        )
     selected_month_payments = payments.filter(installment__month=selected_month)
     payment_months = []
     for payment in payments:
@@ -296,6 +320,8 @@ def _render_dashboard(
             "collection_months": collection_months,
             "selected_month": selected_month,
             "payments": payments,
+            "payment_date_filter": payment_date_filter,
+            "member_name_filter": member_name_filter,
             "selected_month_payments": selected_month_payments,
             "show_month_history": "month" in request.GET,
             "payment_months": payment_months,
@@ -315,7 +341,10 @@ def _render_dashboard(
             "current_month": selected_month.strftime("%B %Y"),
             "member_form": member_form or MemberForm(owner=request.user),
             "payment_form": payment_form or PaymentForm(initial={"payment_date": today}),
-            "month_payment_form": month_payment_form or MonthPaymentForm(month=selected_month),
+            "month_payment_form": month_payment_form or MonthPaymentForm(
+                month=selected_month,
+                owner=request.user,
+            ),
         },
     )
 
@@ -331,7 +360,12 @@ def _dashboard_redirect(request):
     if request.GET.get("view") == "members":
         return redirect(f"{reverse('dashboard')}?view=members")
     if request.GET.get("view") == "payments":
-        return redirect(f"{reverse('dashboard')}?view=payments")
+        query = {"view": "payments"}
+        for filter_name in ("payment_date", "member_name"):
+            filter_value = request.GET.get(filter_name, "").strip()
+            if filter_value:
+                query[filter_name] = filter_value
+        return redirect(f"{reverse('dashboard')}?{urlencode(query)}")
     month = request.GET.get("month")
     if month:
         return redirect(f"{reverse('dashboard')}?month={month}")

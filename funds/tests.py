@@ -212,13 +212,18 @@ class FundTrackerWorkflowTests(TestCase):
 		self.assertContains(response, "Paid")
 		self.assertContains(response, "Pending")
 		self.assertContains(response, "January Pending")
-		self.assertNotContains(response, "February Payer")
+		self.assertEqual(
+			{installment.member_id for installment in response.context["installments"]},
+			{paid_member.pk, unpaid_member.pk},
+		)
 
 		response = self.client.post(
 			f"{reverse('dashboard')}?month=2026-01",
 			{
 				"action": "record_payment",
-				"installment_id": unpaid_installment.pk,
+				"member": unpaid_member.pk,
+				"amount": "55.00",
+				"month": "2026-01",
 				"payment_day": "25",
 				"reference": "JAN-NEW",
 			},
@@ -230,6 +235,40 @@ class FundTrackerWorkflowTests(TestCase):
 		response = self.client.get(reverse("dashboard"), {"month": "2026-01"})
 		self.assertContains(response, "JAN-NEW")
 		self.assertNotContains(response, "FEB-RECEIPT")
+
+	def test_month_history_can_record_payment_without_existing_installment(self):
+		self.client.force_login(self.owner)
+		member = self.create_member(
+			member_id="M-205",
+			name="Unscheduled Payer",
+			phone="5550205",
+			monthly_amount=Decimal("70.00"),
+		)
+
+		response = self.client.get(reverse("dashboard"), {"month": "2026-04"})
+		self.assertContains(response, "Add to payment history")
+		self.assertContains(response, "Unscheduled Payer")
+		self.assertContains(self.client.get(reverse("dashboard")), "Add to payment history")
+
+		response = self.client.post(
+			f"{reverse('dashboard')}?month=2026-04",
+			{
+				"action": "record_payment",
+				"month": "2026-04",
+				"member": member.pk,
+				"amount": "68.50",
+				"payment_day": "12",
+				"reference": "APR-PAYMENT",
+			},
+		)
+
+		self.assertRedirects(response, f"{reverse('dashboard')}?month=2026-04")
+		installment = Installment.objects.get(member=member, month=date(2026, 4, 1))
+		payment = Payment.objects.get(installment=installment)
+		self.assertEqual(installment.amount, Decimal("70.00"))
+		self.assertEqual(payment.amount, Decimal("68.50"))
+		self.assertEqual(payment.payment_date, date(2026, 4, 12))
+		self.assertEqual(payment.reference, "APR-PAYMENT")
 
 	def test_delete_payment_from_history_keeps_installment_unpaid(self):
 		self.client.force_login(self.owner)
@@ -320,6 +359,71 @@ class FundTrackerWorkflowTests(TestCase):
 			Member.objects.filter(owner=self.owner, member_id="M-102", active=True).exists()
 		)
 
+	def test_dashboard_edits_member_details(self):
+		self.client.force_login(self.owner)
+		member = self.create_member(
+			member_id="M-107",
+			name="Before Edit",
+			phone="5550107",
+			monthly_amount=Decimal("40.00"),
+		)
+
+		response = self.client.post(
+			reverse("dashboard"),
+			{
+				"action": "edit_member",
+				"member_pk": member.pk,
+				"member_id": "M-108",
+				"name": "After Edit",
+				"phone": "5550108",
+				"monthly_amount": "75.00",
+			},
+		)
+
+		self.assertRedirects(response, reverse("dashboard"))
+		member.refresh_from_db()
+		self.assertEqual(member.member_id, "M-108")
+		self.assertEqual(member.name, "After Edit")
+		self.assertEqual(member.monthly_amount, Decimal("75.00"))
+
+	def test_dashboard_edits_installment_without_changing_recorded_payment(self):
+		self.client.force_login(self.owner)
+		member = self.create_member(
+			member_id="M-109",
+			name="Installment Member",
+			phone="5550109",
+			monthly_amount=Decimal("40.00"),
+		)
+		installment = Installment.objects.create(
+			member=member,
+			month=date(2026, 1, 1),
+			due_date=date(2026, 1, 31),
+			amount=Decimal("40.00"),
+		)
+		payment = Payment.objects.create(
+			installment=installment,
+			amount=installment.amount,
+			payment_date=date(2026, 1, 20),
+		)
+
+		response = self.client.post(
+			f"{reverse('dashboard')}?month=2026-01",
+			{
+				"action": "edit_installment",
+				"installment_id": installment.pk,
+				"member": member.pk,
+				"month": "2026-01-01",
+				"due_date": "2026-01-31",
+				"amount": "85.00",
+			},
+		)
+
+		self.assertRedirects(response, f"{reverse('dashboard')}?month=2026-01")
+		installment.refresh_from_db()
+		payment.refresh_from_db()
+		self.assertEqual(installment.amount, Decimal("85.00"))
+		self.assertEqual(payment.amount, Decimal("40.00"))
+
 	def test_members_view_only_shows_member_details(self):
 		self.client.force_login(self.owner)
 		self.create_member(
@@ -333,6 +437,8 @@ class FundTrackerWorkflowTests(TestCase):
 
 		self.assertContains(response, "Taylor Quinn")
 		self.assertContains(response, "Add a member")
+		self.assertContains(response, "dashboard-page members-page")
+		self.assertContains(response, 'popover="auto"')
 		self.assertNotContains(response, "Monthly installments")
 		self.assertNotContains(response, "Payment history")
 		self.assertNotContains(response, "FUND OVERVIEW")
@@ -362,6 +468,16 @@ class FundTrackerWorkflowTests(TestCase):
 
 		self.assertContains(response, "LEDGER-ONLY")
 		self.assertContains(response, "Payment history")
+		self.assertContains(response, 'aria-label="Search by payment date"')
+		self.assertContains(response, 'aria-label="Search by member name"')
+		self.assertGreater(
+			response.content.index(b"Log out"),
+			response.content.index(b'class="user-name"'),
+		)
+		self.assertLess(
+			response.content.index(b"Log out"),
+			response.content.index(b'aria-label="Search by payment date"'),
+		)
 		self.assertNotContains(response, "Monthly installments")
 		self.assertNotContains(response, "YOUR COMMUNITY")
 		self.assertNotContains(response, "FUND OVERVIEW")
@@ -372,6 +488,68 @@ class FundTrackerWorkflowTests(TestCase):
 		)
 
 		self.assertRedirects(response, f"{reverse('dashboard')}?view=payments")
+
+	def test_payments_view_filters_by_payment_date_and_member_name(self):
+		self.client.force_login(self.owner)
+		payments = []
+		for member_id, name, phone, paid_on, reference in (
+			("M-301", "Maya Chen", "5550301", date(2026, 1, 20), "MAYA-JAN"),
+			("M-302", "Maya Chen", "5550302", date(2026, 2, 20), "MAYA-FEB"),
+			("M-303", "Alex Kim", "5550303", date(2026, 1, 20), "ALEX-JAN"),
+		):
+			member = self.create_member(
+				member_id=member_id,
+				name=name,
+				phone=phone,
+				monthly_amount=Decimal("45.00"),
+			)
+			installment = Installment.objects.create(
+				member=member,
+				month=paid_on.replace(day=1),
+				due_date=paid_on,
+				amount=Decimal("45.00"),
+			)
+			payments.append(
+				Payment.objects.create(
+					installment=installment,
+					amount=installment.amount,
+					payment_date=paid_on,
+					reference=reference,
+				)
+			)
+
+		date_response = self.client.get(
+			reverse("dashboard"),
+			{"view": "payments", "payment_date": "2026-01-20"},
+		)
+		self.assertEqual(
+			{payment.pk for payment in date_response.context["payments"]},
+			{payments[0].pk, payments[2].pk},
+		)
+
+		name_response = self.client.get(
+			reverse("dashboard"),
+			{"view": "payments", "member_name": "maya"},
+		)
+		self.assertEqual(
+			{payment.pk for payment in name_response.context["payments"]},
+			{payments[0].pk, payments[1].pk},
+		)
+		self.assertContains(name_response, "5550301")
+		self.assertContains(name_response, "5550302")
+
+		combined_response = self.client.get(
+			reverse("dashboard"),
+			{
+				"view": "payments",
+				"payment_date": "2026-01-20",
+				"member_name": "maya",
+			},
+		)
+		self.assertEqual(
+			list(combined_response.context["payments"].values_list("pk", flat=True)),
+			[payments[0].pk],
+		)
 
 	def test_generate_installments_is_idempotent_for_current_month(self):
 		self.client.force_login(self.owner)
@@ -434,6 +612,9 @@ class FundTrackerWorkflowTests(TestCase):
 		payment = Payment.objects.get(installment=installment)
 		self.assertEqual(payment.amount, installment.amount)
 		self.assertEqual(payment.recorded_by, user)
+		response = self.client.get(reverse("dashboard"))
+		self.assertContains(response, "Paid this month")
+		self.assertContains(response, "Jordan Lee")
 		response = self.client.get(reverse("dashboard"), {"view": "payments"})
 		self.assertContains(response, "Paid")
 		self.assertContains(response, "RCPT-204")

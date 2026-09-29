@@ -7,7 +7,7 @@
     <title>Dashboard | Fund Ledger</title>
     <link rel="stylesheet" href="{% static 'funds/app.css' %}">
 </head>
-<body class="dashboard-page">
+<body class="dashboard-page{% if show_members_only %} members-page{% endif %}">
     <header class="topbar">
         <a class="brand" href="{% url 'dashboard' %}"><span class="brand-mark">F</span> Fund Ledger</a>
         <nav class="topnav" aria-label="Main navigation">
@@ -15,7 +15,18 @@
             <a class="nav-link{% if show_members_only %} active{% endif %}" href="{% url 'dashboard' %}?view=members">Members</a>
             <a class="nav-link{% if show_month_history or show_payments_only %} active{% endif %}" href="{% url 'dashboard' %}?view=payments">Payments</a>
         </nav>
-        <div class="user-menu"><span class="user-avatar">{{ request.user.username|first|upper }}</span><span class="user-name">{{ request.user.username }}</span><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="logout-button" type="submit">Log out</button></form></div>
+        <div class="user-area{% if show_payments_only %} user-area-payments{% endif %}">
+            <div class="user-menu"><span class="user-avatar">{{ request.user.username|first|upper }}</span><span class="user-name">{{ request.user.username }}</span><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="logout-button" type="submit">Log out</button></form></div>
+            {% if show_payments_only %}
+            <form method="get" action="{% url 'dashboard' %}" class="payment-search-form payment-search-form-compact">
+                <input type="hidden" name="view" value="payments">
+                <input aria-label="Search by payment date" type="date" name="payment_date" value="{{ payment_date_filter }}">
+                <input aria-label="Search by member name" type="search" name="member_name" value="{{ member_name_filter }}" placeholder="Member name">
+                <button class="button button-primary" type="submit">Search</button>
+                {% if payment_date_filter or member_name_filter %}<a class="button button-quiet" href="{% url 'dashboard' %}?view=payments">Clear</a>{% endif %}
+            </form>
+            {% endif %}
+        </div>
         {% if not show_members_only %}
         <nav class="month-nav" aria-label="Collection months">
             {% for month in collection_months %}<a class="month-link{% if month == selected_month %} active{% endif %}" href="{% url 'dashboard' %}?month={{ month|date:'Y-m' }}">{{ month|date:"M Y" }}</a>{% empty %}<span class="month-nav-empty">No collection months yet</span>{% endfor %}
@@ -31,17 +42,13 @@
             {% if messages %}<div class="messages">{% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}</div>{% endif %}
             <section class="content-section" id="payments">
                 <div class="section-heading"><div><p class="eyebrow">{{ current_month|upper }}</p><h2>Payments</h2></div><span class="section-count">{{ selected_month_payments|length }} recorded</span></div>
-                {% if pending_installments %}
-                    <form method="post" action="{% url 'dashboard' %}?month={{ selected_month|date:'Y-m' }}" class="month-payment-form">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="record_payment">
-                        <label class="field" for="installment_id"><span>Add a member who paid</span><select name="installment_id" id="installment_id" required><option value="">Choose a member</option>{% for installment in pending_installments %}<option value="{{ installment.id }}">{{ installment.member.name }} ({{ installment.member.member_id }}) · {{ installment.amount|floatformat:2 }}</option>{% endfor %}</select></label>
-                        {% for field in month_payment_form %}<label class="field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}
-                        <button class="button button-primary" type="submit">Add to payment history</button>
-                    </form>
-                {% else %}
-                    <p class="month-payment-empty">{% if current_installment_count %}All installments for {{ current_month }} are already paid.{% else %}There are no installments for {{ current_month }} yet.{% endif %}</p>
-                {% endif %}
+                <form method="post" action="{% url 'dashboard' %}?month={{ selected_month|date:'Y-m' }}" class="month-payment-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="record_payment">
+                    <input type="hidden" name="month" value="{{ selected_month|date:'Y-m' }}">
+                    {% for field in month_payment_form %}<label class="field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}
+                    <button class="button button-primary" type="submit">Add to payment history</button>
+                </form>
                 <div class="table-wrap"><table><thead><tr><th>Member</th><th>Paid on</th><th>Amount</th><th>Reference</th><th>Recorded by</th><th>Actions</th></tr></thead><tbody>
                     {% for payment in selected_month_payments %}<tr><td><span class="member-name">{{ payment.installment.member.name }}</span><small class="member-id">{{ payment.installment.member.member_id }}</small></td><td>{{ payment.payment_date|date:"M j, Y" }}</td><td>{{ payment.amount|floatformat:2 }}</td><td>{{ payment.reference|default:"-" }}</td><td>{{ payment.recorded_by.username|default:"-" }}</td><td><form method="post" action="{% url 'dashboard' %}?month={{ selected_month|date:'Y-m' }}" class="row-delete-form" onsubmit="return confirm('Delete the payment from {{ payment.installment.member.name|escapejs }}? The installment will become unpaid.');">{% csrf_token %}<input type="hidden" name="action" value="delete_payment"><input type="hidden" name="payment_id" value="{{ payment.id }}"><button class="button button-danger-small" type="submit">Delete</button></form></td></tr>
                     {% empty %}<tr><td class="empty-state" colspan="6">No payments recorded for {{ current_month }} yet.</td></tr>{% endfor %}
@@ -62,12 +69,12 @@
                 {% for payment_month in payment_months %}
                     <div class="payment-month">
                         <div class="payment-month-heading"><h3>{{ payment_month.month|date:"F Y" }}</h3><span>{{ payment_month.payments|length }} payment{{ payment_month.payments|length|pluralize }}</span></div>
-                        <div class="table-wrap"><table><thead><tr><th>Member</th><th>Installment</th><th>Paid on</th><th>Amount</th><th>Reference</th><th>Recorded by</th><th>Actions</th></tr></thead><tbody>
-                            {% for payment in payment_month.payments %}<tr><td><span class="member-name">{{ payment.installment.member.name }}</span><small class="member-id">{{ payment.installment.member.member_id }}</small></td><td>{{ payment.installment.month|date:"F Y" }}</td><td>{{ payment.payment_date|date:"M j, Y" }}</td><td>{{ payment.amount|floatformat:2 }}</td><td>{{ payment.reference|default:"-" }}</td><td>{{ payment.recorded_by.username|default:"-" }}</td><td><form method="post" class="row-delete-form" onsubmit="return confirm('Delete the payment from {{ payment.installment.member.name|escapejs }}? The installment will become unpaid.');">{% csrf_token %}<input type="hidden" name="action" value="delete_payment"><input type="hidden" name="payment_id" value="{{ payment.id }}"><button class="button button-danger-small" type="submit">Delete</button></form></td></tr>{% endfor %}
+                        <div class="table-wrap"><table><thead><tr><th>Member</th><th>Phone</th><th>Installment</th><th>Paid on</th><th>Amount</th><th>Reference</th><th>Recorded by</th><th>Actions</th></tr></thead><tbody>
+                            {% for payment in payment_month.payments %}<tr><td><span class="member-name">{{ payment.installment.member.name }}</span><small class="member-id">{{ payment.installment.member.member_id }}</small></td><td>{{ payment.installment.member.phone }}</td><td>{{ payment.installment.month|date:"F Y" }}</td><td>{{ payment.payment_date|date:"M j, Y" }}</td><td>{{ payment.amount|floatformat:2 }}</td><td>{{ payment.reference|default:"-" }}</td><td>{{ payment.recorded_by.username|default:"-" }}</td><td><form method="post" class="row-delete-form" onsubmit="return confirm('Delete the payment from {{ payment.installment.member.name|escapejs }}? The installment will become unpaid.');">{% csrf_token %}<input type="hidden" name="action" value="delete_payment"><input type="hidden" name="payment_id" value="{{ payment.id }}"><button class="button button-danger-small" type="submit">Delete</button></form></td></tr>{% endfor %}
                         </tbody></table></div>
                     </div>
                 {% empty %}
-                    <div class="table-wrap"><table><tbody><tr><td class="empty-state">Payments you record will appear here.</td></tr></tbody></table></div>
+                    <div class="table-wrap"><table><tbody><tr><td class="empty-state" colspan="8">No payments match these filters.</td></tr></tbody></table></div>
                 {% endfor %}
             </section>
         {% else %}
@@ -95,7 +102,7 @@
                     <table>
                         <thead><tr><th>Member</th><th>Phone</th><th>Monthly amount</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody>
-                            {% for member in members %}<tr><td><span class="member-initial">{{ member.name|first|upper }}</span><span class="member-name">{{ member.name }}</span><small class="member-id">{{ member.member_id }}</small></td><td>{{ member.phone }}</td><td>{{ member.monthly_amount|floatformat:2 }}</td><td><span class="status-pill {% if member.active %}status-active{% else %}status-inactive{% endif %}">{% if member.active %}Active{% else %}Inactive{% endif %}</span></td><td><details class="row-editor"><summary class="button button-small">Edit</summary><form method="post" class="row-edit-form">{% csrf_token %}<input type="hidden" name="action" value="edit_member"><input type="hidden" name="member_id" value="{{ member.id }}">{% for field in member.edit_form %}<label class="field"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}<button class="button button-small" type="submit">Save</button></form></details><form method="post" class="row-delete-form" onsubmit="return confirm('Delete {{ member.name|escapejs }} and all associated records?');">{% csrf_token %}<input type="hidden" name="action" value="delete_member"><input type="hidden" name="member_id" value="{{ member.id }}"><button class="button button-danger-small" type="submit">Delete</button></form></td></tr>
+                            {% for member in members %}<tr><td><span class="member-initial">{{ member.name|first|upper }}</span><span class="member-name">{{ member.name }}</span><small class="member-id">{{ member.member_id }}</small></td><td>{{ member.phone }}</td><td>{{ member.monthly_amount|floatformat:2 }}</td><td><span class="status-pill {% if member.active %}status-active{% else %}status-inactive{% endif %}">{% if member.active %}Active{% else %}Inactive{% endif %}</span></td><td><button class="button button-small" type="button" popovertarget="member-edit-{{ member.id }}" aria-label="Edit {{ member.name }}">Edit</button><form method="post" id="member-edit-{{ member.id }}" popover="auto" class="row-edit-form member-edit-popover" {% if member_edit_form and member_edit_form.instance.pk == member.pk %}open{% endif %}>{% csrf_token %}<h3>Edit {{ member.name }}</h3><input type="hidden" name="action" value="edit_member"><input type="hidden" name="member_pk" value="{{ member.id }}">{% for field in member.edit_form %}<label class="field"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}<div class="member-edit-actions"><button class="button button-small" type="submit">Save</button><button class="button button-quiet" type="button" popovertarget="member-edit-{{ member.id }}" popovertargetaction="hide">Cancel</button></div></form><form method="post" class="row-delete-form" onsubmit="return confirm('Delete {{ member.name|escapejs }} and all associated records?');">{% csrf_token %}<input type="hidden" name="action" value="delete_member"><input type="hidden" name="member_id" value="{{ member.id }}"><button class="button button-danger-small" type="submit">Delete</button></form></td></tr>
                             {% empty %}<tr><td class="empty-state" colspan="5">No members yet. Add your first member to get started.</td></tr>{% endfor %}
                         </tbody>
                     </table>
@@ -106,6 +113,13 @@
         {% if not show_members_only %}
         <section class="content-section" id="installments">
             <div class="section-heading"><div><p class="eyebrow">{{ current_month|upper }}</p><h2>Monthly installments</h2></div><span class="section-count">{{ installments|length }} scheduled</span></div>
+            <form method="post" action="{% url 'dashboard' %}" class="month-payment-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="record_payment">
+                <input type="hidden" name="month" value="{{ selected_month|date:'Y-m' }}">
+                {% for field in month_payment_form %}<label class="field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}
+                <button class="button button-primary" type="submit">Add to payment history</button>
+            </form>
             <div class="pending-summary" aria-live="polite">
                 {% if pending_installments %}
                     <strong>{{ pending_count }} unpaid</strong>
@@ -116,6 +130,16 @@
                 {% else %}
                     <strong>No installments created</strong>
                     <span>Generate installments for {{ current_month }} to track unpaid members.</span>
+                {% endif %}
+            </div>
+            <div class="paid-summary">
+                <strong>Paid this month · {{ paid_count }}</strong>
+                {% if paid_count %}
+                    <ul class="paid-summary-list">
+                        {% for installment in installments %}{% if installment.payment %}<li><span>{{ installment.member.name }}</span><span>{{ installment.payment.amount|floatformat:2 }}</span><time datetime="{{ installment.payment.payment_date|date:'Y-m-d' }}">{{ installment.payment.payment_date|date:"M j" }}</time></li>{% endif %}{% endfor %}
+                    </ul>
+                {% else %}
+                    <span>No members have paid yet.</span>
                 {% endif %}
             </div>
             <div class="table-wrap"><table><thead><tr><th>Member</th><th>Month</th><th>Due date</th><th>Amount</th><th>Status</th><th>Record payment</th><th>Actions</th></tr></thead><tbody>
