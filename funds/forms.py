@@ -5,6 +5,19 @@ from django import forms
 from .models import Installment, Member, Payment
 
 
+class MemberSelect(forms.Select):
+    def __init__(self, *args, monthly_amounts=None, **kwargs):
+        self.monthly_amounts = monthly_amounts or {}
+        super().__init__(*args, **kwargs)
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        monthly_amount = self.monthly_amounts.get(str(value))
+        if monthly_amount is not None:
+            option["attrs"]["data-monthly-amount"] = monthly_amount
+        return option
+
+
 class CollectionPeriodForm(forms.Form):
     start_month = forms.DateField(
         input_formats=["%Y-%m"],
@@ -91,7 +104,15 @@ class MonthPaymentForm(forms.Form):
     def __init__(self, *args, month, owner, **kwargs):
         super().__init__(*args, **kwargs)
         self.month = month
-        self.fields["member"].queryset = Member.objects.filter(owner=owner)
+        members = Member.objects.filter(owner=owner)
+        self.fields["member"].queryset = members
+        self.fields["member"].widget = MemberSelect(
+            choices=self.fields["member"].choices,
+            monthly_amounts={
+                str(member.pk): str(member.monthly_amount)
+                for member in members
+            }
+        )
         self.fields["payment_day"].widget.attrs["max"] = monthrange(month.year, month.month)[1]
 
     def clean_payment_day(self):

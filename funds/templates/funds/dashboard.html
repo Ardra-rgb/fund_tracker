@@ -153,5 +153,20 @@
         <footer class="page-footer">Fund Ledger <span>·</span> {{ current_month }}</footer>
         {% endif %}
     </main>
+    <script>
+        document.querySelectorAll(".month-payment-form").forEach((form) => {
+            const memberField = form.querySelector('select[name="member"]');
+            const amountField = form.querySelector('input[name="amount"]');
+            if (!memberField || !amountField) return;
+
+            const fillMonthlyAmount = () => {
+                const monthlyAmount = memberField.selectedOptions[0]?.dataset.monthlyAmount;
+                if (monthlyAmount) amountField.value = monthlyAmount;
+            };
+
+            memberField.addEventListener("change", fillMonthlyAmount);
+            if (!amountField.value) fillMonthlyAmount();
+        });
+    </script>
 </body>
 </html>

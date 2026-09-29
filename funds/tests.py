@@ -248,6 +248,7 @@ class FundTrackerWorkflowTests(TestCase):
 		response = self.client.get(reverse("dashboard"), {"month": "2026-04"})
 		self.assertContains(response, "Add to payment history")
 		self.assertContains(response, "Unscheduled Payer")
+		self.assertContains(response, 'data-monthly-amount="70.00"')
 		self.assertContains(self.client.get(reverse("dashboard")), "Add to payment history")
 
 		response = self.client.post(
