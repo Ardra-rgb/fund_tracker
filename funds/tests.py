@@ -229,11 +229,26 @@ class FundTrackerWorkflowTests(TestCase):
 			},
 		)
 
-		self.assertRedirects(response, f"{reverse('dashboard')}?month=2026-01")
+		self.assertRedirects(
+			response,
+			f"{reverse('dashboard')}?month=2026-01&member={unpaid_member.pk}",
+		)
 		payment = Payment.objects.get(installment=unpaid_installment)
 		self.assertEqual(payment.payment_date, date(2026, 1, 25))
-		response = self.client.get(reverse("dashboard"), {"month": "2026-01"})
+		response = self.client.get(
+			reverse("dashboard"),
+			{"month": "2026-01", "member": unpaid_member.pk},
+		)
 		self.assertContains(response, "JAN-NEW")
+		self.assertContains(response, "January Pending")
+		self.assertNotContains(response, "January Payer")
+		self.assertNotContains(response, "JAN-RECEIPT")
+		self.assertContains(response, "Add to payment history")
+		self.assertNotContains(response, "Show all members")
+		self.assertEqual(
+			{installment.member_id for installment in response.context["installments"]},
+			{unpaid_member.pk},
+		)
 		self.assertNotContains(response, "FEB-RECEIPT")
 
 	def test_month_history_can_record_payment_without_existing_installment(self):
@@ -263,7 +278,10 @@ class FundTrackerWorkflowTests(TestCase):
 			},
 		)
 
-		self.assertRedirects(response, f"{reverse('dashboard')}?month=2026-04")
+		self.assertRedirects(
+			response,
+			f"{reverse('dashboard')}?month=2026-04&member={member.pk}",
+		)
 		installment = Installment.objects.get(member=member, month=date(2026, 4, 1))
 		payment = Payment.objects.get(installment=installment)
 		self.assertEqual(installment.amount, Decimal("70.00"))
@@ -600,7 +618,7 @@ class FundTrackerWorkflowTests(TestCase):
 			amount=Decimal("60.00"),
 		)
 
-		self.client.post(
+		response = self.client.post(
 			reverse("dashboard"),
 			{
 				"action": "record_payment",
@@ -608,6 +626,10 @@ class FundTrackerWorkflowTests(TestCase):
 				"payment_date": timezone.localdate().isoformat(),
 				"reference": "RCPT-204",
 			},
+		)
+		self.assertRedirects(
+			response,
+			f"{reverse('dashboard')}?month={installment.month:%Y-%m}&member={member.pk}",
 		)
 
 		payment = Payment.objects.get(installment=installment)

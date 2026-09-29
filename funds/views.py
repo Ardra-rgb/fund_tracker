@@ -175,6 +175,7 @@ def dashboard(request):
                         selected_month.month,
                         monthrange(selected_month.year, selected_month.month)[1],
                     )
+                    payment_recorded = False
                     try:
                         with transaction.atomic():
                             installment, _ = Installment.objects.get_or_create(
@@ -200,8 +201,11 @@ def dashboard(request):
                                     recorded_by=request.user,
                                 )
                                 messages.success(request, "Payment recorded.")
+                                payment_recorded = True
                     except IntegrityError:
                         messages.error(request, "This installment is already paid.")
+                    if payment_recorded:
+                        return _dashboard_member_redirect(selected_month, member)
                     return _dashboard_redirect(request)
                 return _render_dashboard(request, month_payment_form=form)
             installment = get_object_or_404(
@@ -228,6 +232,7 @@ def dashboard(request):
                     messages.error(request, "This installment is already paid.")
                 else:
                     messages.success(request, "Payment recorded.")
+                    return _dashboard_member_redirect(installment.month, installment.member)
                 return _dashboard_redirect(request)
             return _render_dashboard(request, payment_form=form)
 
@@ -260,9 +265,19 @@ def _render_dashboard(
         selected_month = current_month
     if collection_months and selected_month not in collection_months:
         selected_month = current_month if current_month in collection_months else collection_months[0]
+    focused_member = (
+        Member.objects.filter(owner=request.user, pk=request.GET.get("member")).first()
+        if request.GET.get("member")
+        else None
+    )
+    installment_queryset = Installment.objects.filter(
+        member__owner=request.user,
+        month=selected_month,
+    )
+    if focused_member:
+        installment_queryset = installment_queryset.filter(member=focused_member)
     installments = list(
-        Installment.objects.filter(member__owner=request.user, month=selected_month)
-        .select_related("member")
+        installment_queryset.select_related("member")
         .prefetch_related("payment")
         .order_by("member__name")
     )
@@ -303,6 +318,10 @@ def _render_dashboard(
             installment__member__name__icontains=member_name_filter
         )
     selected_month_payments = payments.filter(installment__month=selected_month)
+    if focused_member:
+        selected_month_payments = selected_month_payments.filter(
+            installment__member=focused_member
+        )
     payment_months = []
     for payment in payments:
         month = payment.payment_date.replace(day=1)
@@ -319,6 +338,7 @@ def _render_dashboard(
             "installments": installments,
             "collection_months": collection_months,
             "selected_month": selected_month,
+            "focused_member": focused_member,
             "payments": payments,
             "payment_date_filter": payment_date_filter,
             "member_name_filter": member_name_filter,
@@ -370,3 +390,8 @@ def _dashboard_redirect(request):
     if month:
         return redirect(f"{reverse('dashboard')}?month={month}")
     return redirect("dashboard")
+
+
+def _dashboard_member_redirect(month, member):
+    query = urlencode({"month": month.strftime("%Y-%m"), "member": member.pk})
+    return redirect(f"{reverse('dashboard')}?{query}")

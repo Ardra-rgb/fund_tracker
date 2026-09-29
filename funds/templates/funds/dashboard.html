@@ -36,8 +36,8 @@
     <main class="dashboard-main" id="overview">
         {% if show_month_history %}
             <div class="page-heading">
-                <div><p class="eyebrow">MONTHLY LEDGER</p><h1>Payment history · {{ current_month }}</h1><p class="muted">Payments recorded for installments due in {{ current_month }}.</p></div>
-                <a class="button button-quiet" href="{% url 'dashboard' %}">Back to dashboard</a>
+                <div><p class="eyebrow">MONTHLY LEDGER</p><h1>Payment history · {{ current_month }}</h1><p class="muted">{% if focused_member %}Ledger for {{ focused_member.name }}.{% else %}Payments recorded for installments due in {{ current_month }}.{% endif %}</p></div>
+                {% if not focused_member %}<a class="button button-quiet" href="{% url 'dashboard' %}">Back to dashboard</a>{% endif %}
             </div>
             {% if messages %}<div class="messages">{% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}</div>{% endif %}
             <section class="content-section" id="payments">
