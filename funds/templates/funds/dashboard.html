@@ -91,8 +91,8 @@
         <section class="stats-grid" aria-label="Monthly summary">
             <article class="stat-card stat-collected"><span class="stat-label">Collected this month</span><strong>{{ collected|floatformat:2 }}</strong><span class="stat-foot">{{ paid_count }} payments recorded</span></article>
             <article class="stat-card"><span class="stat-label">Active members</span><strong>{{ active_members }}</strong><span class="stat-foot">In your fund</span></article>
-            <article class="stat-card"><span class="stat-label">Paid installments</span><strong>{{ paid_count }}<small> / {{ current_installment_count }}</small></strong><span class="stat-foot">{{ current_month }}</span></article>
-            <article class="stat-card stat-pending"><span class="stat-label">Still pending</span><strong>{{ pending_count }}</strong><span class="stat-foot">Current month</span></article>
+            <article class="stat-card"><span class="stat-label">Members paid</span><strong>{{ paid_count }}<small> / {{ active_members }}</small></strong><span class="stat-foot">{{ current_month }}</span></article>
+            <article class="stat-card stat-pending"><span class="stat-label">Still pending</span><strong>{{ pending_member_count }}</strong><span class="stat-foot">Current month</span></article>
         </section>
         {% endif %}
         <section class="content-section" id="members">
@@ -153,6 +153,45 @@
         <footer class="page-footer">Fund Ledger <span>·</span> {{ current_month }}</footer>
         {% endif %}
     </main>
+    <dialog class="member-delete-dialog" id="member-delete-dialog" aria-labelledby="member-delete-title" aria-describedby="member-delete-description">
+        <div class="member-delete-content">
+            <p class="eyebrow">ACCOUNT ACTION</p>
+            <h2 id="member-delete-title">Delete this member?</h2>
+            <p id="member-delete-description">You are about to remove <strong data-member-delete-name></strong> and all associated installments and payment records. This cannot be undone.</p>
+            <div class="member-delete-actions">
+                <button class="button button-quiet" type="button" data-member-delete-cancel>Keep member</button>
+                <button class="button button-danger" type="button" data-member-delete-confirm>Delete member</button>
+            </div>
+        </div>
+    </dialog>
+    <script>
+        const memberDeleteDialog = document.querySelector("#member-delete-dialog");
+        let memberDeleteForm = null;
+
+        document.querySelectorAll(".member-layout .row-delete-form").forEach((form) => {
+            form.removeAttribute("onsubmit");
+            form.querySelector('button[type="submit"]')?.addEventListener("click", (event) => {
+                event.preventDefault();
+                memberDeleteForm = form;
+                memberDeleteDialog.querySelector("[data-member-delete-name]").textContent =
+                    form.closest("tr").querySelector(".member-name").textContent.trim();
+                memberDeleteDialog.showModal();
+            });
+        });
+
+        memberDeleteDialog.querySelector("[data-member-delete-cancel]").addEventListener("click", () => {
+            memberDeleteForm = null;
+            memberDeleteDialog.close();
+        });
+
+        memberDeleteDialog.querySelector("[data-member-delete-confirm]").addEventListener("click", () => {
+            if (!memberDeleteForm) return;
+            const form = memberDeleteForm;
+            memberDeleteForm = null;
+            memberDeleteDialog.close();
+            form.requestSubmit();
+        });
+    </script>
     <script>
         document.querySelectorAll(".month-payment-form").forEach((form) => {
             const memberField = form.querySelector('select[name="member"]');

@@ -241,7 +241,7 @@ class FundTrackerWorkflowTests(TestCase):
 		)
 		self.assertContains(response, "JAN-NEW")
 		self.assertContains(response, "January Pending")
-		self.assertNotContains(response, "January Payer")
+		self.assertContains(response, "January Payer")
 		self.assertNotContains(response, "JAN-RECEIPT")
 		self.assertContains(response, "Add to payment history")
 		self.assertNotContains(response, "Show all members")
@@ -250,6 +250,13 @@ class FundTrackerWorkflowTests(TestCase):
 			{unpaid_member.pk},
 		)
 		self.assertNotContains(response, "FEB-RECEIPT")
+
+		response = self.client.get(reverse("dashboard"))
+		self.assertEqual(response.context["paid_count"], 1)
+		self.assertEqual(response.context["active_members"], 3)
+		self.assertEqual(response.context["pending_member_count"], 2)
+		self.assertContains(response, "Members paid")
+		self.assertContains(response, "1<small> / 3</small>")
 
 	def test_month_history_can_record_payment_without_existing_installment(self):
 		self.client.force_login(self.owner)
@@ -377,6 +384,9 @@ class FundTrackerWorkflowTests(TestCase):
 		self.assertTrue(
 			Member.objects.filter(owner=self.owner, member_id="M-102", active=True).exists()
 		)
+		response = self.client.get(reverse("dashboard"))
+		self.assertContains(response, "Delete this member?")
+		self.assertContains(response, "data-member-delete-confirm")
 
 	def test_dashboard_edits_member_details(self):
 		self.client.force_login(self.owner)

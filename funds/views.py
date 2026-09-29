@@ -295,7 +295,18 @@ def _render_dashboard(
             else InstallmentForm(instance=installment, owner=request.user)
         )
     current_installments = installments
-    paid_count = sum(hasattr(installment, "payment") for installment in current_installments)
+    active_member_queryset = Member.objects.filter(owner=request.user, active=True)
+    active_member_count = active_member_queryset.count()
+    paid_count = (
+        Payment.objects.filter(
+            installment__member__in=active_member_queryset,
+            installment__month=selected_month,
+        )
+        .values("installment__member_id")
+        .distinct()
+        .count()
+    )
+    pending_member_count = max(active_member_count - paid_count, 0)
     pending_installments = [
         installment for installment in current_installments if not hasattr(installment, "payment")
     ]
@@ -345,8 +356,9 @@ def _render_dashboard(
             "selected_month_payments": selected_month_payments,
             "show_month_history": "month" in request.GET,
             "payment_months": payment_months,
-            "active_members": Member.objects.filter(owner=request.user, active=True).count(),
+            "active_members": active_member_count,
             "paid_count": paid_count,
+            "pending_member_count": pending_member_count,
             "pending_count": len(pending_installments),
             "pending_installments": pending_installments,
             "current_installment_count": len(current_installments),
