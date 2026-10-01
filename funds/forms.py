@@ -88,7 +88,7 @@ class MonthPaymentForm(forms.Form):
         min_value=0.01,
         max_digits=10,
         decimal_places=2,
-        widget=forms.NumberInput(attrs={"min": "0.01", "step": "0.01"}),
+        widget=forms.NumberInput(attrs={"min": "0.01", "step": "0.01", "readonly": True}),
     )
     payment_day = forms.IntegerField(
         label="Day paid",

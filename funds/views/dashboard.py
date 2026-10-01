@@ -3,84 +3,14 @@ from datetime import date
 from urllib.parse import urlencode
 
 from django.contrib import messages
-from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from .forms import CollectionPeriodForm, InstallmentForm, MemberForm, MonthPaymentForm, PaymentForm
-from .models import CollectionPeriod, Installment, Member, Payment
-
-
-def login_view(request, redirect_authenticated=True):
-    if request.user.is_authenticated and redirect_authenticated:
-        return redirect("dashboard")
-
-    form = AuthenticationForm(request, data=request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        login(request, form.get_user())
-        return redirect("dashboard")
-    return render(request, "funds/auth.html", {"form": form, "mode": "login"})
-
-
-def register_view(request):
-    form = UserCreationForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        logout(request)
-        return redirect("login")
-    return render(request, "funds/auth.html", {"form": form, "mode": "register"})
-
-
-def logout_view(request):
-    if request.method == "POST":
-        logout(request)
-        return redirect("login")
-    return redirect("dashboard")
-
-
-@login_required(login_url="login")
-def collection_period(request):
-    current_month = timezone.localdate().replace(day=1)
-    form = CollectionPeriodForm(
-        request.POST or None,
-        initial={"start_month": current_month, "end_month": current_month},
-    )
-    if request.method == "POST" and form.is_valid():
-        start_month = form.cleaned_data["start_month"]
-        end_month = form.cleaned_data["end_month"]
-        active_members = Member.objects.filter(owner=request.user, active=True)
-        created = 0
-        with transaction.atomic():
-            CollectionPeriod.objects.get_or_create(
-            owner=request.user,
-                start_month=start_month,
-                end_month=end_month,
-            )
-            month = start_month
-            while month <= end_month:
-                due_date = date(
-                    month.year,
-                    month.month,
-                    monthrange(month.year, month.month)[1],
-                )
-                for member in active_members:
-                    _, was_created = Installment.objects.get_or_create(
-                        member=member,
-                        month=month,
-                        defaults={"due_date": due_date, "amount": member.monthly_amount},
-                    )
-                    created += was_created
-                month = date(month.year + month.month // 12, month.month % 12 + 1, 1)
-        messages.success(
-            request,
-            f"{created} installment(s) created for {start_month:%B %Y} through {end_month:%B %Y}.",
-        )
-        return redirect(f"{reverse('dashboard')}?month={start_month:%Y-%m}")
-    return render(request, "funds/collection_period.html", {"form": form})
+from ..forms import InstallmentForm, MemberForm, MonthPaymentForm, PaymentForm
+from ..models import CollectionPeriod, Installment, Member, Payment
 
 
 @login_required(login_url="login")
@@ -95,7 +25,26 @@ def dashboard(request):
             if member_form.is_valid():
                 member = member_form.save(commit=False)
                 member.owner = request.user
-                member.save()
+                requested_month = request.POST.get("month") or request.GET.get("month")
+                try:
+                    installment_month = date.fromisoformat(f"{requested_month}-01")
+                except (TypeError, ValueError):
+                    installment_month = current_month
+                due_date = date(
+                    installment_month.year,
+                    installment_month.month,
+                    monthrange(installment_month.year, installment_month.month)[1],
+                )
+                with transaction.atomic():
+                    member.save()
+                    Installment.objects.get_or_create(
+                        member=member,
+                        month=installment_month,
+                        defaults={
+                            "due_date": due_date,
+                            "amount": member.monthly_amount,
+                        },
+                    )
                 messages.success(request, "Member added.")
                 return _dashboard_redirect(request)
             return _render_dashboard(request, member_form=member_form)
@@ -153,7 +102,7 @@ def dashboard(request):
         if action == "generate_installments":
             return redirect("collection_period")
         if action == "record_payment":
-            requested_month = request.GET.get("month") or request.POST.get("month")
+            requested_month = request.POST.get("month") or request.GET.get("month")
             if "payment_day" in request.POST:
                 if requested_month:
                     try:
@@ -191,7 +140,7 @@ def dashboard(request):
                             else:
                                 Payment.objects.create(
                                     installment=installment,
-                                    amount=form.cleaned_data["amount"],
+                                    amount=installment.amount,
                                     payment_date=date(
                                         selected_month.year,
                                         selected_month.month,
@@ -257,14 +206,55 @@ def _render_dashboard(
     collection_months.update(
         Installment.objects.filter(member__owner=request.user).dates("month", "month")
     )
-    collection_months = sorted(collection_months, reverse=True)
+    collection_months = sorted(collection_months)
+    payment_month_posted = (
+        request.POST.get("action") == "record_payment"
+        and "payment_day" in request.POST
+    )
     requested_month = request.GET.get("month")
+    if payment_month_posted:
+        requested_month = request.POST.get("month") or requested_month
     try:
         selected_month = date.fromisoformat(f"{requested_month}-01")
     except (TypeError, ValueError):
         selected_month = current_month
-    if collection_months and selected_month not in collection_months:
-        selected_month = current_month if current_month in collection_months else collection_months[0]
+    if collection_months and selected_month not in collection_months and not payment_month_posted:
+        selected_month = current_month if current_month in collection_months else collection_months[-1]
+    month_is_scheduled = CollectionPeriod.objects.filter(
+        owner=request.user,
+        start_month__lte=selected_month,
+        end_month__gte=selected_month,
+    ).exists()
+    if not month_is_scheduled:
+        month_is_scheduled = Installment.objects.filter(
+            member__owner=request.user,
+            month=selected_month,
+        ).exists()
+    if month_is_scheduled:
+        next_month = date(
+            selected_month.year + selected_month.month // 12,
+            selected_month.month % 12 + 1,
+            1,
+        )
+        due_date = date(
+            selected_month.year,
+            selected_month.month,
+            monthrange(selected_month.year, selected_month.month)[1],
+        )
+        with transaction.atomic():
+            for member in Member.objects.filter(
+                owner=request.user,
+                active=True,
+                created_at__date__lt=next_month,
+            ):
+                Installment.objects.get_or_create(
+                    member=member,
+                    month=selected_month,
+                    defaults={
+                        "due_date": due_date,
+                        "amount": member.monthly_amount,
+                    },
+                )
     focused_member = (
         Member.objects.filter(owner=request.user, pk=request.GET.get("member")).first()
         if request.GET.get("member")
@@ -279,9 +269,9 @@ def _render_dashboard(
     installments = list(
         installment_queryset.select_related("member")
         .prefetch_related("payment")
-        .order_by("member__name")
+        .order_by("member__member_id")
     )
-    members = list(Member.objects.filter(owner=request.user).order_by("name"))
+    members = list(Member.objects.filter(owner=request.user).order_by("member_id"))
     for member in members:
         member.edit_form = (
             member_edit_form
@@ -333,12 +323,19 @@ def _render_dashboard(
         selected_month_payments = selected_month_payments.filter(
             installment__member=focused_member
         )
+    selected_month_payments = selected_month_payments.order_by(
+        "installment__member__member_id"
+    )
     payment_months = []
     for payment in payments:
         month = payment.payment_date.replace(day=1)
         if not payment_months or payment_months[-1]["month"] != month:
             payment_months.append({"month": month, "payments": []})
         payment_months[-1]["payments"].append(payment)
+    for payment_month in payment_months:
+        payment_month["payments"].sort(
+            key=lambda payment: payment.installment.member.member_id
+        )
     return render(
         request,
         "funds/dashboard.html",
@@ -399,6 +396,8 @@ def _dashboard_redirect(request):
                 query[filter_name] = filter_value
         return redirect(f"{reverse('dashboard')}?{urlencode(query)}")
     month = request.GET.get("month")
+    if request.POST.get("action") == "record_payment" and "payment_day" in request.POST:
+        month = request.POST.get("month") or month
     if month:
         return redirect(f"{reverse('dashboard')}?month={month}")
     return redirect("dashboard")

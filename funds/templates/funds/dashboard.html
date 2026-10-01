@@ -55,11 +55,13 @@
                 </tbody></table></div>
             </section>
             <section class="content-section" id="installments">
-                <div class="section-heading"><div><p class="eyebrow">{{ current_month|upper }}</p><h2>Installments</h2></div><span class="section-count">{{ current_installment_count }} total</span></div>
+                <div class="section-heading"><div><p class="eyebrow">{{ current_month|upper }}</p><h2>Pending installments</h2></div><span class="section-count">{{ pending_count }} pending</span></div>
+                {% with installments=pending_installments %}
                 <div class="table-wrap"><table><thead><tr><th>Member</th><th>Due date</th><th>Amount</th><th>Status</th></tr></thead><tbody>
-                    {% for installment in installments %}<tr><td><span class="member-name">{{ installment.member.name }}</span><small class="member-id">{{ installment.member.member_id }}</small></td><td>{{ installment.due_date|date:"M j, Y" }}</td><td>{{ installment.amount|floatformat:2 }}</td><td>{% if installment.payment %}<span class="status-pill status-paid">Paid</span>{% else %}<span class="status-pill status-pending">Pending</span>{% endif %}</td></tr>
-                    {% empty %}<tr><td class="empty-state" colspan="4">No installments recorded for {{ current_month }}.</td></tr>{% endfor %}
+                    {% for installment in installments %}<tr id="installment-{{ installment.id }}"><td><span class="member-name">{{ installment.member.name }}</span><small class="member-id">{{ installment.member.member_id }}</small></td><td>{{ installment.due_date|date:"M j, Y" }}</td><td>{{ installment.amount|floatformat:2 }}</td><td><span class="status-pill status-pending">Pending</span></td></tr>
+                    {% empty %}<tr><td class="empty-state" colspan="4">No unpaid installments for {{ current_month }}.</td></tr>{% endfor %}
                 </tbody></table></div>
+                {% endwith %}
             </section>
         {% elif show_payments_only %}
             <div class="page-heading"><div><p class="eyebrow">THE LEDGER</p><h1>Payment history</h1><p class="muted">Payments recorded across all collection months.</p></div></div>
@@ -107,16 +109,16 @@
                         </tbody>
                     </table>
                 </div>
-                <aside class="add-member-panel"><p class="eyebrow">GET STARTED</p><h3>Add a member</h3><form method="post" class="form-stack compact-form">{% csrf_token %}<input type="hidden" name="action" value="add_member">{% for field in member_form %}<label class="field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}<button class="button button-primary button-wide" type="submit">Add member <span aria-hidden="true">→</span></button></form></aside>
+                <aside class="add-member-panel"><p class="eyebrow">GET STARTED</p><h3>Add a member</h3><form method="post" class="form-stack compact-form">{% csrf_token %}<input type="hidden" name="action" value="add_member"><input type="hidden" name="month" value="{{ selected_month|date:'Y-m' }}">{% for field in member_form %}<label class="field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}<button class="button button-primary button-wide" type="submit">Add member <span aria-hidden="true">→</span></button></form></aside>
             </div>
         </section>
         {% if not show_members_only %}
         <section class="content-section" id="installments">
-            <div class="section-heading"><div><p class="eyebrow">{{ current_month|upper }}</p><h2>Monthly installments</h2></div><span class="section-count">{{ installments|length }} scheduled</span></div>
+            <div class="section-heading"><div><p class="eyebrow">{{ current_month|upper }}</p><h2>Pending installments</h2></div><span class="section-count">{{ pending_count }} pending</span></div>
             <form method="post" action="{% url 'dashboard' %}" class="month-payment-form">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="record_payment">
-                <input type="hidden" name="month" value="{{ selected_month|date:'Y-m' }}">
+                <label class="field" for="overview-payment-month"><span>Installment month</span><input id="overview-payment-month" type="month" name="month" value="{{ selected_month|date:'Y-m' }}" required></label>
                 {% for field in month_payment_form %}<label class="field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}
                 <button class="button button-primary" type="submit">Add to payment history</button>
             </form>
@@ -142,10 +144,12 @@
                     <span>No members have paid yet.</span>
                 {% endif %}
             </div>
+            {% with installments=pending_installments %}
             <div class="table-wrap"><table><thead><tr><th>Member</th><th>Month</th><th>Due date</th><th>Amount</th><th>Status</th><th>Record payment</th><th>Actions</th></tr></thead><tbody>
                 {% for installment in installments %}<tr id="installment-{{ installment.id }}"><td><span class="member-name">{{ installment.member.name }}</span><small class="member-id">{{ installment.member.member_id }}</small></td><td>{{ installment.month|date:"F Y" }}</td><td>{{ installment.due_date|date:"M j, Y" }}</td><td>{{ installment.amount|floatformat:2 }}</td><td>{% if installment.payment %}<span class="status-pill status-paid">Paid</span>{% else %}<span class="status-pill status-pending">Pending</span>{% endif %}</td><td>{% if not installment.payment %}<form method="post" class="payment-form">{% csrf_token %}<input type="hidden" name="action" value="record_payment"><input type="hidden" name="installment_id" value="{{ installment.id }}"><input type="date" name="payment_date" value="{{ payment_form.initial.payment_date|date:'Y-m-d' }}" aria-label="Payment date"><input type="text" name="reference" placeholder="Reference" aria-label="Payment reference"><button class="button button-small" type="submit">Record</button></form>{% else %}<span class="muted">{{ installment.payment.payment_date|date:"M j" }}</span>{% endif %}</td><td><details class="row-editor"><summary class="button button-small">Edit</summary><form method="post" class="row-edit-form">{% csrf_token %}<input type="hidden" name="action" value="edit_installment"><input type="hidden" name="installment_id" value="{{ installment.id }}">{% for field in installment.edit_form %}<label class="field"><span>{{ field.label }}</span>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</label>{% endfor %}<button class="button button-small" type="submit">Save</button></form></details><form method="post" class="row-delete-form" onsubmit="return confirm('Delete this installment and its payment record?');">{% csrf_token %}<input type="hidden" name="action" value="delete_installment"><input type="hidden" name="installment_id" value="{{ installment.id }}"><button class="button button-danger-small" type="submit">Delete</button></form></td></tr>
-                {% empty %}<tr><td class="empty-state" colspan="7">No installments for {{ current_month }} yet. Create this month’s installments to begin.</td></tr>{% endfor %}
+                {% empty %}<tr><td class="empty-state" colspan="7">No unpaid installments for {{ current_month }}.</td></tr>{% endfor %}
             </tbody></table></div>
+            {% endwith %}
         </section>
         {% endif %}
         {% endif %}
@@ -194,6 +198,20 @@
     </script>
     <script>
         document.querySelectorAll(".month-payment-form").forEach((form) => {
+            const monthField = form.querySelector('input[name="month"][type="month"]');
+            const paymentDayField = form.querySelector('input[name="payment_day"]');
+            if (monthField && paymentDayField) {
+                const updatePaymentDayLimit = () => {
+                    const [year, month] = monthField.value.split("-").map(Number);
+                    if (year && month) {
+                        paymentDayField.max = new Date(year, month, 0).getDate();
+                    }
+                };
+
+                monthField.addEventListener("change", updatePaymentDayLimit);
+                updatePaymentDayLimit();
+            }
+
             const memberField = form.querySelector('select[name="member"]');
             const amountField = form.querySelector('input[name="amount"]');
             if (!memberField || !amountField) return;

@@ -146,6 +146,8 @@ class FundTrackerWorkflowTests(TestCase):
 		self.assertContains(response, "Casey Morgan")
 		self.assertContains(response, "Jan 2026")
 		self.assertContains(response, "Mar 2026")
+		self.assertLess(response.content.index(b"Jan 2026"), response.content.index(b"Feb 2026"))
+		self.assertLess(response.content.index(b"Feb 2026"), response.content.index(b"Mar 2026"))
 
 	def test_selected_month_history_only_shows_and_adds_payments_for_that_month(self):
 		user = self.owner
@@ -203,11 +205,11 @@ class FundTrackerWorkflowTests(TestCase):
 
 		self.assertLess(
 			response.content.index(b"<h2>Payments</h2>"),
-			response.content.index(b"<h2>Installments</h2>"),
+			response.content.index(b"<h2>Pending installments</h2>"),
 		)
 		self.assertContains(response, "JAN-RECEIPT")
 		self.assertNotContains(response, "FEB-RECEIPT")
-		self.assertContains(response, "Installments")
+		self.assertContains(response, "Pending installments")
 		self.assertContains(response, "Due date")
 		self.assertContains(response, "Paid")
 		self.assertContains(response, "Pending")
@@ -292,9 +294,225 @@ class FundTrackerWorkflowTests(TestCase):
 		installment = Installment.objects.get(member=member, month=date(2026, 4, 1))
 		payment = Payment.objects.get(installment=installment)
 		self.assertEqual(installment.amount, Decimal("70.00"))
-		self.assertEqual(payment.amount, Decimal("68.50"))
+		self.assertEqual(payment.amount, Decimal("70.00"))
 		self.assertEqual(payment.payment_date, date(2026, 4, 12))
 		self.assertEqual(payment.reference, "APR-PAYMENT")
+
+	def test_overview_can_record_payment_for_a_chosen_month(self):
+		self.client.force_login(self.owner)
+		member = self.create_member(
+			member_id="M-206",
+			name="Chosen Month Payer",
+			phone="5550206",
+			monthly_amount=Decimal("75.00"),
+		)
+
+		response = self.client.get(reverse("dashboard"))
+		self.assertContains(response, 'id="overview-payment-month"')
+		self.assertContains(response, 'type="month" name="month"')
+
+		response = self.client.post(
+			reverse("dashboard"),
+			{
+				"action": "record_payment",
+				"month": "2026-02",
+				"member": member.pk,
+				"amount": "1.00",
+				"payment_day": "30",
+				"reference": "INVALID-FEB-PAYMENT",
+			},
+		)
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.context["selected_month"], date(2026, 2, 1))
+		self.assertContains(response, 'value="2026-02"')
+		self.assertTrue(response.context["month_payment_form"].errors)
+
+		response = self.client.post(
+			reverse("dashboard"),
+			{
+				"action": "record_payment",
+				"month": "2026-04",
+				"member": member.pk,
+				"amount": "75.00",
+				"payment_day": "12",
+				"reference": "OVERVIEW-APR-PAYMENT",
+			},
+		)
+
+		self.assertRedirects(
+			response,
+			f"{reverse('dashboard')}?month=2026-04&member={member.pk}",
+		)
+		installment = Installment.objects.get(member=member, month=date(2026, 4, 1))
+		payment = Payment.objects.get(installment=installment)
+		self.assertEqual(payment.amount, Decimal("75.00"))
+		self.assertEqual(payment.payment_date, date(2026, 4, 12))
+		self.assertEqual(payment.reference, "OVERVIEW-APR-PAYMENT")
+
+	def test_monthly_ledgers_only_show_unpaid_installments(self):
+		self.client.force_login(self.owner)
+		paid_member = self.create_member(
+			member_id="M-208",
+			name="Paid January Member",
+			phone="5550208",
+			monthly_amount=Decimal("50.00"),
+		)
+		pending_member = self.create_member(
+			member_id="M-209",
+			name="Pending January Member",
+			phone="5550209",
+			monthly_amount=Decimal("60.00"),
+		)
+		paid_installment = Installment.objects.create(
+			member=paid_member,
+			month=date(2026, 1, 1),
+			due_date=date(2026, 1, 30),
+			amount=paid_member.monthly_amount,
+		)
+		pending_installment = Installment.objects.create(
+			member=pending_member,
+			month=date(2026, 1, 1),
+			due_date=date(2026, 1, 31),
+			amount=pending_member.monthly_amount,
+		)
+		Payment.objects.create(
+			installment=paid_installment,
+			amount=paid_installment.amount,
+			payment_date=date(2026, 1, 20),
+		)
+
+		for response in (
+			self.client.get(reverse("dashboard")),
+			self.client.get(reverse("dashboard"), {"month": "2026-01"}),
+		):
+			self.assertContains(response, "Pending installments")
+			self.assertContains(response, f'id="installment-{pending_installment.pk}"')
+			self.assertNotContains(response, f'id="installment-{paid_installment.pk}"')
+			self.assertContains(response, "Pending")
+
+	def test_ledgers_order_member_details_by_member_id(self):
+		self.client.force_login(self.owner)
+		members = [
+			self.create_member(
+				member_id="M-001",
+				name="Zulu Paid",
+				phone="5550301",
+				monthly_amount=Decimal("50.00"),
+			),
+			self.create_member(
+				member_id="M-002",
+				name="Alpha Paid",
+				phone="5550302",
+				monthly_amount=Decimal("50.00"),
+			),
+			self.create_member(
+				member_id="M-003",
+				name="Zulu Pending",
+				phone="5550303",
+				monthly_amount=Decimal("50.00"),
+			),
+			self.create_member(
+				member_id="M-004",
+				name="Alpha Pending",
+				phone="5550304",
+				monthly_amount=Decimal("50.00"),
+			),
+		]
+		installments = [
+			Installment.objects.create(
+				member=member,
+				month=date(2026, 1, 1),
+				due_date=date(2026, 1, 31),
+				amount=member.monthly_amount,
+			)
+			for member in members
+		]
+		for installment in installments[:2]:
+			Payment.objects.create(
+				installment=installment,
+				amount=installment.amount,
+				payment_date=date(2026, 1, 20),
+			)
+
+		response = self.client.get(reverse("dashboard"), {"month": "2026-01"})
+		self.assertEqual(
+			[member.member_id for member in response.context["members"]],
+			["M-001", "M-002", "M-003", "M-004"],
+		)
+		self.assertEqual(
+			[installment.member.member_id for installment in response.context["pending_installments"]],
+			["M-003", "M-004"],
+		)
+		self.assertEqual(
+			[payment.installment.member.member_id for payment in response.context["selected_month_payments"]],
+			["M-001", "M-002"],
+		)
+
+		response = self.client.get(reverse("dashboard"), {"view": "payments"})
+		self.assertEqual(
+			[
+				payment.installment.member.member_id
+				for payment in response.context["payment_months"][0]["payments"]
+			],
+			["M-001", "M-002"],
+		)
+
+	def test_new_member_gets_pending_installment_for_selected_month(self):
+		self.client.force_login(self.owner)
+
+		response = self.client.post(
+			f"{reverse('dashboard')}?month=2026-04",
+			{
+				"action": "add_member",
+				"month": "2026-04",
+				"member_id": "M-210",
+				"name": "New April Member",
+				"phone": "5550210",
+				"monthly_amount": "80.00",
+			},
+		)
+
+		self.assertRedirects(response, f"{reverse('dashboard')}?month=2026-04")
+		member = Member.objects.get(owner=self.owner, member_id="M-210")
+		installment = Installment.objects.get(member=member, month=date(2026, 4, 1))
+		self.assertEqual(installment.amount, Decimal("80.00"))
+		self.assertEqual(installment.due_date, date(2026, 4, 30))
+
+		response = self.client.get(reverse("dashboard"), {"month": "2026-04"})
+		self.assertContains(response, "New April Member")
+		self.assertContains(response, f'id="installment-{installment.pk}"')
+		self.assertContains(response, "Pending")
+
+	def test_existing_member_without_installment_is_added_to_scheduled_month_ledger(self):
+		self.client.force_login(self.owner)
+		created_month = timezone.localdate().replace(day=1)
+		month = date(
+			created_month.year + created_month.month // 12,
+			created_month.month % 12 + 1,
+			1,
+		)
+		next_month = date(month.year + month.month // 12, month.month % 12 + 1, 1)
+		due_date = next_month - timedelta(days=1)
+		CollectionPeriod.objects.create(
+			owner=self.owner,
+			start_month=month,
+			end_month=month,
+		)
+		member = self.create_member(
+			member_id="M-211",
+			name="Previously Added Member",
+			phone="5550211",
+			monthly_amount=Decimal("90.00"),
+		)
+
+		response = self.client.get(reverse("dashboard"), {"month": month.strftime("%Y-%m")})
+
+		installment = Installment.objects.get(member=member, month=month)
+		self.assertEqual(installment.amount, Decimal("90.00"))
+		self.assertEqual(installment.due_date, due_date)
+		self.assertContains(response, "Previously Added Member")
+		self.assertContains(response, f'id="installment-{installment.pk}"')
+		self.assertContains(response, "Pending")
 
 	def test_delete_payment_from_history_keeps_installment_unpaid(self):
 		self.client.force_login(self.owner)
