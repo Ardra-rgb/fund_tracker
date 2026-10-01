@@ -27,7 +27,6 @@ class CollectionPeriodForm(forms.Form):
         input_formats=["%Y-%m"],
         widget=forms.DateInput(format="%Y-%m", attrs={"type": "month"}),
     )
-
     def clean(self):
         cleaned_data = super().clean()
         start_month = cleaned_data.get("start_month")

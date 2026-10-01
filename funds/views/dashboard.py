@@ -21,15 +21,15 @@ def dashboard(request):
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "add_member":
+            requested_month = request.POST.get("month") or request.GET.get("month")
+            try:
+                installment_month = date.fromisoformat(f"{requested_month}-01")
+            except (TypeError, ValueError):
+                installment_month = current_month
             member_form = MemberForm(request.POST, owner=request.user)
             if member_form.is_valid():
                 member = member_form.save(commit=False)
                 member.owner = request.user
-                requested_month = request.POST.get("month") or request.GET.get("month")
-                try:
-                    installment_month = date.fromisoformat(f"{requested_month}-01")
-                except (TypeError, ValueError):
-                    installment_month = current_month
                 due_date = date(
                     installment_month.year,
                     installment_month.month,
